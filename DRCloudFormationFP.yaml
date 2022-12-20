@@ -1,0 +1,520 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'RDS Parameters'
+      Parameters:
+      - Engine
+      - DBInstanceClass
+      - PreferredBackupWindow
+      - PreferredMaintenanceWindow
+Parameters:
+  Engine:
+    Description: 'Aurora engine and version'
+    Type: String
+    AllowedValues:
+    - '5.6.mysql-aurora.1.19.1' # aws rds describe-db-engine-versions --engine aurora --query 'DBEngineVersions[?contains(SupportedEngineModes,`provisioned`)].EngineVersion'
+    - '5.6.mysql-aurora.1.23.2'
+    - '5.6.mysql-aurora.1.23.4'
+    - aurora
+    - '5.7.mysql-aurora.2.04.3' # aws rds describe-db-engine-versions --engine aurora-mysql --query 'DBEngineVersions[?contains(SupportedEngineModes,`provisioned`)].EngineVersion'
+    - '5.7.mysql-aurora.2.09.2'
+    - '5.7.mysql-aurora.2.09.3'
+    - '5.7.mysql-aurora.2.10.1'
+    - '8.0.mysql-aurora.3.02.0'
+    - 'aurora-postgresql-10.14' # aws rds describe-db-engine-versions --engine aurora-postgresql --query 'DBEngineVersions[?contains(SupportedEngineModes,`provisioned`)].EngineVersion'
+    - 'aurora-postgresql-11.9'
+    - 'aurora-postgresql-12.4'
+    - 'aurora-postgresql-12.8'
+    - 'aurora-postgresql-13.4'
+    - 'aurora-postgresql-14.3'
+  LatestAmiId:
+    Description: 'Gets the latest AMI from Systems Manager Parameter store'
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  DBInstanceClass:
+    Description: 'The instance type of database server.'
+    Type: String
+    Default: 'db.t2.small'
+  PreferredBackupWindow:
+    Description: 'The daily time range in UTC during which you want to create automated backups.'
+    Type: String
+    Default: '09:54-10:24'
+  PreferredMaintenanceWindow: 
+    Description: 'The weekly time range (in UTC) during which system maintenance can occur.'
+    Type: String
+    Default: 'sat:07:00-sat:07:30'
+  PeerRequesterAccountId:
+    Type: String
+    Description: 'Requester of perring vpc conection'
+    Default: 'XXXX'
+  PeerVPCAccountId:
+    Type: String
+    Description: 'The AWS account ID of the owner of the accepter VPC'
+    Default: 'XXXXX'
+  PeerVPCId:
+    Type: String
+    Description: 'The ID of the VPC with which you are creating the VPC peering connection'
+    Default: 'XXXX'
+  PeerRoleArn:
+    Type: String
+    Description: 'The Amazon Resource Name (ARN) of the VPC peer role for the peering connection in another AWS account.'
+    Default: 'XXXX'
+  PeerRegion:
+    Type: String
+    Description: 'he Region code for the accepter VPC, if the accepter VPC is located in a Region other than the Region in which you make the request.'
+    Default: 'us-east-1'
+Mappings:
+  EngineMap:
+    aurora:
+      Engine: aurora
+      EngineVersion: '5.6.10a'
+      Port: 3306
+      ClusterParameterGroupFamily: 'aurora5.6'
+      ParameterGroupFamily: 'aurora5.6'
+    '5.6.mysql-aurora.1.19.1':
+      Engine: aurora
+      EngineVersion: '5.6.mysql_aurora.1.19.1'
+      Port: 3306
+      ClusterParameterGroupFamily: 'aurora5.6'
+      ParameterGroupFamily: 'aurora5.6'
+    '5.6.mysql-aurora.1.23.2':
+      Engine: aurora
+      EngineVersion: '5.6.mysql_aurora.1.23.2'
+      Port: 3306
+      ClusterParameterGroupFamily: 'aurora5.6'
+      ParameterGroupFamily: 'aurora5.6'
+    '5.6.mysql-aurora.1.23.4':
+      Engine: aurora
+      EngineVersion: '5.6.mysql_aurora.1.23.4'
+      Port: 3306
+      ClusterParameterGroupFamily: 'aurora5.6'
+      ParameterGroupFamily: 'aurora5.6'
+    '5.7.mysql-aurora.2.09.2':
+      Engine: 'aurora-mysql'
+      EngineVersion: '5.7.mysql_aurora.2.09.2'
+      Port: 3306
+      ClusterParameterGroupFamily: 'aurora-mysql5.7'
+      ParameterGroupFamily: 'aurora-mysql5.7'
+    '5.7.mysql-aurora.2.09.3':
+      Engine: 'aurora-mysql'
+      EngineVersion: '5.7.mysql_aurora.2.09.3'
+      Port: 3306
+      ClusterParameterGroupFamily: 'aurora-mysql5.7'
+      ParameterGroupFamily: 'aurora-mysql5.7'
+    '5.7.mysql-aurora.2.10.1':
+      Engine: 'aurora-mysql'
+      EngineVersion: '5.7.mysql_aurora.2.10.1'
+      Port: 3306
+      ClusterParameterGroupFamily: 'aurora-mysql5.7'
+      ParameterGroupFamily: 'aurora-mysql5.7'
+    '8.0.mysql-aurora.3.02.0':
+      Engine: 'aurora-mysql'
+      EngineVersion: '8.0.mysql_aurora.3.02.0'
+      Port: 3306
+      ClusterParameterGroupFamily: 'aurora-mysql8.0'
+      ParameterGroupFamily: 'aurora-mysql8.0'
+    '5.7.mysql-aurora.2.04.3':
+      Engine: 'aurora-mysql'
+      EngineVersion: '5.7.mysql_aurora.2.04.3'
+      Port: 3306
+      ClusterParameterGroupFamily: 'aurora-mysql5.7'
+      ParameterGroupFamily: 'aurora-mysql5.7'
+    'aurora-postgresql-10.4':
+      Engine: 'aurora-postgresql'
+      EngineVersion: '10.4'
+      Port: 5432
+      ClusterParameterGroupFamily: 'aurora-postgresql10'
+      ParameterGroupFamily: 'aurora-postgresql10'
+    'aurora-postgresql-10.5':
+      Engine: 'aurora-postgresql'
+      EngineVersion: '10.5'
+      Port: 5432
+      ClusterParameterGroupFamily: 'aurora-postgresql10'
+      ParameterGroupFamily: 'aurora-postgresql10'
+    'aurora-postgresql-10.6':
+      Engine: 'aurora-postgresql'
+      EngineVersion: '10.6'
+      Port: 5432
+      ClusterParameterGroupFamily: 'aurora-postgresql10'
+      ParameterGroupFamily: 'aurora-postgresql10'
+    'aurora-postgresql-10.7':
+      Engine: 'aurora-postgresql'
+      EngineVersion: '10.7'
+      Port: 5432
+      ClusterParameterGroupFamily: 'aurora-postgresql10'
+      ParameterGroupFamily: 'aurora-postgresql10'
+    'aurora-postgresql-10.14':
+      Engine: 'aurora-postgresql'
+      EngineVersion: '10.14'
+      Port: 5432
+      ClusterParameterGroupFamily: 'aurora-postgresql10'
+      ParameterGroupFamily: 'aurora-postgresql10'
+    'aurora-postgresql-11.9':
+      Engine: 'aurora-postgresql'
+      EngineVersion: '11.9'
+      Port: 5432
+      ClusterParameterGroupFamily: 'aurora-postgresql11'
+      ParameterGroupFamily: 'aurora-postgresql11'
+    'aurora-postgresql-12.4':
+      Engine: 'aurora-postgresql'
+      EngineVersion: '12.4'
+      Port: 5432
+      ClusterParameterGroupFamily: 'aurora-postgresql12'
+      ParameterGroupFamily: 'aurora-postgresql12'
+    'aurora-postgresql-12.8':
+      Engine: 'aurora-postgresql'
+      EngineVersion: '12.8'
+      Port: 5432
+      ClusterParameterGroupFamily: 'aurora-postgresql12'
+      ParameterGroupFamily: 'aurora-postgresql12'
+    'aurora-postgresql-13.4':
+      Engine: 'aurora-postgresql'
+      EngineVersion: '13.4'
+      Port: 5432
+      ClusterParameterGroupFamily: 'aurora-postgresql13'
+      ParameterGroupFamily: 'aurora-postgresql13'
+    'aurora-postgresql-14.3':
+      Engine: 'aurora-postgresql'
+      EngineVersion: '14.3'
+      Port: 5432
+      ClusterParameterGroupFamily: 'aurora-postgresql14'
+      ParameterGroupFamily: 'aurora-postgresql14'
+Conditions:
+  HasEngineMySQL: !Or [!Equals [!FindInMap [EngineMap, !Ref Engine, Engine], 'aurora'], !Equals [!FindInMap [EngineMap, !Ref Engine, Engine], 'aurora-mysql']]
+
+ #////////////////////////VPC Setup///////////////////
+
+Resources:
+  # First, a VPC:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: xx.xxx.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: Name
+        Value:  !Join ['', [!Ref "AWS::StackName", "-VPC" ]]
+
+  # Our VPC will need internet access:      
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DependsOn: VPC
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    # Notice how you can't attach an IGW to a VPC unless both are created:
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Now some subnets, 2 public and 2 private:
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: xx.xxx.200.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs ]    # Get the first AZ in the list        
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-Public-A
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: xx.xxx.201.0/24
+      AvailabilityZone: !Select [ 1, !GetAZs ]    # Get the second AZ in the list  
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-Public-B
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: xx.xxx.100.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs ]    # Get the first AZ in the list  
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-Private-A
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: xx.xxx.101.0/24
+      AvailabilityZone: !Select [ 1, !GetAZs ]    # Get the second AZ in the list  
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-Private-B
+        
+  # Some route tables for our subnets:
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Public
+  PublicRoute1:   # Public route table has direct routing to IGW:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicRoute2:   # 
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: xxx.xx.0.0/16
+      GatewayId: !Ref InternetGateway
+      
+  # Here is a private route table:
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Private
+  PrivateRoute1:            # Private route table can access web via NAT (created below)
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      # Route traffic through the NAT Gateway:
+      NatGatewayId: !Ref NATGateway
+
+  # Attach the public subnets to public route tables, 
+  # and attach the private subnets to private route tables:    
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+  PrivateSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+  PrivateSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTable
+
+  # A NAT Gateway: 
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt ElasticIPAddress.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags: 
+      - Key: Name
+        Value: !Sub NAT-${AWS::StackName}
+  ElasticIPAddress:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+
+ #///////////////////////////Perring VPCS DRtoProd///////////////////
+
+  #peerRole:
+    #Type: 'AWS::IAM::Role'
+    #Properties:
+      #AssumeRolePolicyDocument:
+        #Statement:
+          #- Principal:
+              #AWS: !Ref PeerRequesterAccountId
+            #Action:
+              #- 'sts:AssumeRole'
+            #Effect: Allow
+      #Path: /
+      #Policies:
+        #- PolicyName: root
+          #PolicyDocument:
+            #Version: 2012-10-17
+            #Statement:
+              #- Effect: Allow
+                #Action: 'ec2:AcceptVpcPeeringConnection'
+                #Resource: '*'
+
+  #vpcPeeringConnection:
+    #Type: 'AWS::EC2::VPCPeeringConnection'
+    #Properties:
+      #PeerRegion: !Ref PeerRegion  
+      #VpcId: !Ref VPC
+      #PeerVpcId: !Ref PeerVPCId
+      #PeerOwnerId: !Ref PeerVPCAccountId
+      #PeerRoleArn: !Ref PeerRoleArn
+
+
+ #///////////////////////////Security Grups//////////////
+
+  InstanceSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    DependsOn: VPC
+    Properties:
+      GroupDescription: Enable SSH access and HTTP access on the inbound port
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: InstanceSecurityGroup
+
+  EFSSecurityGroup:
+        Type: "AWS::EC2::SecurityGroup"
+        DependsOn: VPC
+        Properties:
+            GroupDescription: "security group for the RDS EFS"
+            GroupName: "test-EFS-SG"
+            VpcId: !Ref VPC
+            SecurityGroupIngress: 
+              - IpProtocol: "tcp"
+                FromPort: 2049
+                ToPort: 2049
+                CidrIp: 0.0.0.0/0
+                Description: 'Allow NFS traffic - TCP 2049'
+            Tags:
+              - Key: Name
+                Value: RDS-EFS-SG
+
+  ClusterSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    DependsOn: VPC
+    Properties:
+      GroupDescription: !Ref 'AWS::StackName'
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3306 #!FindInMap [EngineMap, !Ref Engine, Port]
+        ToPort: 3306 #!FindInMap [EngineMap, !Ref Engine, Port]
+      VpcId: !Ref VPC
+      Tags: 
+        - Key: Name
+        Value: RDS-Cluster-SG
+
+ #///////////////////////////Ec2 instance////////////////
+  
+  MyEC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: InstanceSecurityGroup
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: t2.micro
+      Tags:
+        - Key: Name
+          Value: DR Instance
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet:
+            - Ref: InstanceSecurityGroup
+            - Ref: EFSSecurityGroup
+          SubnetId: !Ref PublicSubnetA
+
+ #///////////////////////////EFS Setup////////////////////
+
+  EFSFileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      BackupPolicy:
+        Status: DISABLED
+      Encrypted: false
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_60_DAYS
+      PerformanceMode: generalPurpose
+      Encrypted: false
+      ThroughputMode: bursting
+      FileSystemTags: 
+        - Key: Name
+          Value: DR-EFS
+
+  MountTarget1:
+    Type: AWS::EFS::MountTarget
+    Properties: 
+      FileSystemId: !Ref EFSFileSystem
+      SecurityGroups: 
+        - !Ref EFSSecurityGroup
+      SubnetId: !Ref PrivateSubnetA
+
+ #///////////////////////////RDS Setup////////////////////
+
+  DBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: !Ref 'AWS::StackName'
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+
+  DBClusterParameterGroup:
+    Type: 'AWS::RDS::DBClusterParameterGroup'
+    Properties:
+      Description: !Ref 'AWS::StackName'
+      Family: 'aurora-mysql5.7' #!FindInMap [EngineMap, !Ref Engine, ClusterParameterGroupFamily]
+      Parameters: !If
+      - HasEngineMySQL
+      - character_set_client: utf8
+        character_set_connection: utf8
+        character_set_database: utf8
+        character_set_filesystem: utf8
+        character_set_results: utf8
+        character_set_server: utf8
+        collation_connection: utf8_general_ci
+        collation_server: utf8_general_ci
+      - client_encoding: 'UTF8'
+  DBCluster:
+    DeletionPolicy: Delete # default is "Snapshot" *CHANGE IF NEEDS IN FUTURE*
+    UpdateReplacePolicy: Delete
+    Type: 'AWS::RDS::DBCluster'
+    DependsOn: ClusterSecurityGroup
+    Properties:
+      BackupRetentionPeriod: 35
+      DatabaseName: DRDB
+      DBClusterParameterGroupName: !Ref DBClusterParameterGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      Engine: 'aurora-mysql' #!FindInMap [EngineMap, !Ref Engine, Engine]
+      EngineMode: provisioned
+      EngineVersion: '5.7.mysql_aurora.2.10.1' #!FindInMap [EngineMap, !Ref Engine, EngineVersion]
+      MasterUsername: XXXX 
+      MasterUserPassword: XXXX    
+      Port: 3306 #!FindInMap [EngineMap, !Ref Engine, Port]
+      PreferredBackupWindow: !Ref PreferredBackupWindow
+      PreferredMaintenanceWindow: !Ref PreferredMaintenanceWindow
+      StorageEncrypted: false 
+      VpcSecurityGroupIds:
+        - !Ref ClusterSecurityGroup
+  DBParameterGroup:
+    Type: 'AWS::RDS::DBParameterGroup'
+    Properties:
+      Description: !Ref 'AWS::StackName'
+      Family: 'aurora-mysql5.7' #!FindInMap [EngineMap, !Ref Engine, ParameterGroupFamily]
+
+  #DB Instance
+  DBInstanceA:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: true
+      CopyTagsToSnapshot: true
+      DBClusterIdentifier: !Ref DBCluster
+      DBInstanceClass: !Ref DBInstanceClass
+      DBParameterGroupName: !Ref DBParameterGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      Engine: 'aurora-mysql' #!FindInMap [EngineMap, !Ref Engine, Engine]
+  
+
